@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: publice-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: publice-exporter
+  template:
+    metadata:
+      labels:
+        app: publice-exporter
+    spec:
+      containers:
+      - name: publice-exporter
+        image: your-registry/publice-exporter:latest
+        ports:
+        - containerPort: 5535
+        env:
+        - name: DEVICE_ID
+          value: "0"
