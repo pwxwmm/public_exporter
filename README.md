@@ -24,7 +24,7 @@
 ## **📌 安装 & 运行**
 ### **1️⃣ 从源码运行**
 ```sh
-git clone https://github.com/pwxwmm/publice_exporter.git
+git clone ssh://git@code.iflytek.com:30004/mmwei3/public_exporter.git
 cd publice_exporter
 
 go mod tidy
@@ -36,14 +36,14 @@ go run cmd/main.go
 
 构建 Docker 镜像
 
-docker buildx build --platform linux/amd64,linux/arm64 -t your-registry/publice-exporter:latest .
-docker push your-registry/publice-exporter:latest
+docker buildx build --platform linux/amd64,linux/arm64 -t mmwei3/publice-exporter:latest .
+docker push mmwei3/publice-exporter:latest
 
 运行容器
 
 docker run -d -p 5535:5535 \
   -e DEVICE_ID=0 \
-  --name publice_exporter your-registry/publice-exporter:latest
+  --name publice_exporter mmwei3/publice-exporter:latest
 
 访问 http://localhost:5535/metrics 查看采集的 Prometheus 指标。
 
@@ -69,7 +69,7 @@ spec:
     spec:
       containers:
       - name: publice-exporter
-        image: your-registry/publice-exporter:latest
+        image: mmwei3/publice-exporter:latest
         ports:
         - containerPort: 5535
         env:
