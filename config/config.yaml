@@ -1,0 +1,45 @@
+global:
+  log_file: "/var/log/exporter/public_exporter.log"
+  log_level: "info"
+  log_max_age: 7         # Log retention in days
+  log_rotation_time: 24  # Rotation time in hours
+  default_scrape_interval: 30
+
+clusters:
+  cluster_A:
+    enabled: true
+    collectors:
+      npu:
+        enabled: true
+        interval: 37
+        timeout: 10
+        script_path: "/opt/scripts/shell/npu_status.sh"
+        script_type: "shell"
+      gpu:
+        enabled: true
+        interval: 68
+        timeout: 15
+        script_path: "/opt/scripts/shell/gpu_status.sh"
+        script_type: "shell"
+      temp:
+        enabled: true
+        interval: 56
+        timeout: 10
+        script_path: "/opt/scripts/python/temp_collector.py"
+        script_type: "python"
+
+  cluster_B:
+    enabled: false
+    collectors:
+      gpu:
+        enabled: true
+        interval: 45
+        timeout: 10
+        script_path: "/usr/local/bin/gpu_status_cluster_B.sh"
+        script_type: "shell"
+      cpu:
+        enabled: true
+        interval: 20
+        timeout: 10
+        script_path: "/usr/local/bin/cpu_status.sh"
+        script_type: "shell"

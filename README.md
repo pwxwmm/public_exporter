@@ -1,110 +1,220 @@
-# publice_exporter
-
-`publice_exporter` 是一个基于 Prometheus 的 Exporter，用于采集 **NPU 设备状态** 和 **Docker 运行时信息**，并通过 `/metrics` 接口暴露 Prometheus 指标。  
-该项目支持 **Kubernetes 部署**，并计划未来开源，支持更多采集器的扩展。
 
 ---
 
-## **📌 功能**
-1. **NPU 设备网络接口状态监控**
-   - 采集 `hccn_tool -i %d -link_stat -g` 命令输出
-   - 统计 **link up / link down 总次数**
-   - 计算 **最近两次 link 状态变更时间差**
-   
-2. **Docker 运行时信息采集**
-   - 采集 `docker info | grep 'Default Runtime'`
-   - 监控 **默认 Docker 运行时 (runc, kata, etc.)**
+# Public Exporter - Custom Script Integration Guide
 
-3. **标准 Prometheus Exporter**
-   - 指标以 `/metrics` 方式暴露
-   - 可扩展更多采集器，如 GPU、磁盘、网络等
+## Author Information
 
----
+- **Author**: mmwei3
+- **Email**: mmwei3@iflytek.com, 1300042631@qq.com
+- **Date**: 2025-03-28
 
-## **📌 安装 & 运行**
-### **1️⃣ 从源码运行**
-```sh
-git clone ssh://git@code.iflytek.com:30004/mmwei3/public_exporter.git
-cd publice_exporter
+## Overview
 
-go mod tidy
-go run cmd/main.go
+The `public_exporter` allows you to integrate custom scripts for data collection. These scripts are executed periodically, and the data they produce is exposed in the **Prometheus** format for monitoring. This guide provides the format your script's output should follow, and how the data will be exposed by the exporter.
 
-默认监听 5535 端口，并暴露 /metrics。
+## Script Output Format
 
-2️⃣ 使用 Docker 运行
+Your script should produce output in the following format:
 
-构建 Docker 镜像
+1. **Metric Name**
+2. **Labels (optional)**
+3. **Metric Value**
 
-docker buildx build --platform linux/amd64,linux/arm64 -t mmwei3/publice-exporter:latest .
-docker push mmwei3/publice-exporter:latest
+The basic syntax for each output line is:
 
-运行容器
+```
+<metric_name>{<label1>="<value1>", <label2>="<value2>", ...} <metric_value>
+```
 
-docker run -d -p 5535:5535 \
-  -e DEVICE_ID=0 \
-  --name publice_exporter mmwei3/publice-exporter:latest
+### Examples
 
-访问 http://localhost:5535/metrics 查看采集的 Prometheus 指标。
+#### 1. Metric with Labels
+```bash
+cluster_1_demo_collector_temperature{gpu="0"} 55
+```
+- **Metric Name**: `cluster_1_demo_collector_temperature`
+- **Label**: `gpu="0"`
+- **Metric Value**: `55`
 
-📌 Kubernetes 部署
+#### 2. Metric with Multiple Labels
+```bash
+cluster_1_demo_collector_temperature{gpu="1", type="test", testkey1="testvalue1"} 60
+```
+- **Metric Name**: `cluster_1_demo_collector_temperature`
+- **Labels**: `gpu="1"`, `type="test"`, `testkey1="testvalue1"`
+- **Metric Value**: `60`
 
-1️⃣ 部署到 K8s
+#### 3. Metric without Labels
+```bash
+cluster_1_demo_collector_temperature 65
+```
+- **Metric Name**: `cluster_1_demo_collector_temperature`
+- **Metric Value**: `65`
 
-创建 k8s/deployment.yaml
+## Script Execution and Output Handling
 
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: publice-exporter
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: publice-exporter
-  template:
-    metadata:
-      labels:
-        app: publice-exporter
-    spec:
-      containers:
-      - name: publice-exporter
-        image: mmwei3/publice-exporter:latest
-        ports:
-        - containerPort: 5535
-        env:
-        - name: DEVICE_ID
-          value: "0"
+### Supported Script Types
+You can use the following script types:
+- **Shell Scripts** (`.sh`)
+- **Python Scripts** (`.py`)
 
-应用 Deployment
+Ensure the output is consistent with the format shown above, with one line per metric.
 
-kubectl apply -f k8s/deployment.yaml
+### Example Shell Script (`/opt/scripts/demo_collector.sh`):
+```bash
+#!/bin/bash
 
-📌 Prometheus 指标
+echo 'cluster_1_demo_collector_temperature{gpu="0"} 55'
+echo 'cluster_1_demo_collector_temperature{gpu="1",type="test",testkey1="testvalue1"} 60'
+echo 'cluster_1_demo_collector_temperature 65'
+```
 
-指标	描述	标签
-hccn_link_up_total	NPU 网络接口 UP 次数	device
-hccn_link_down_total	NPU 网络接口 DOWN 次数	device
-hccn_link_change_duration_seconds	最近两次 Link 状态变更时间差	device
-docker_default_runtime	Docker 默认 Runtime（如 runc）	runtime
+### Example Python Script (`/opt/scripts/demo_collector.py`):
+```python
+#!/usr/bin/env python3
 
-访问 http://localhost:5535/metrics 获取完整数据。
+print('cluster_1_demo_collector_temperature{gpu="0"} 55')
+print('cluster_1_demo_collector_temperature{gpu="1",type="test",testkey1="testvalue1"} 60')
+print('cluster_1_demo_collector_temperature 65')
+```
 
-📌 未来扩展
+## Exporter Data Exposure
 
-✅ 多架构支持：arm64 / amd64
-✅ 更多采集器：支持 CPU、内存、磁盘、网络等
-✅ 更完善的 Kubernetes 部署
+### Prometheus Format
 
-🚀 欢迎贡献和 Star ⭐️！
+When the script is executed, the exporter will expose the data in the following format at the `/metrics` endpoint:
 
----
+#### Example Output (from `/metrics` endpoint):
 
-**📝 这个 `README.md` 已包含：**
-- **项目介绍**
-- **功能描述**
-- **本地运行**
-- **Docker 构建 & 运行**
-- **Kubernetes 部署**
-- **Prometheus 采集指标**
-- **未来扩展计划**
+```
+# HELP cluster_1_demo_collector_temperature Metric collected from external script 
+# (script_path="/opt/scripts/demo_collector.sh", exec_time="2025-04-01 14:35:21.123")
+# TYPE cluster_1_demo_collector_temperature gauge
+cluster_1_demo_collector_temperature{gpu="0"} 55
+cluster_1_demo_collector_temperature{gpu="1",type="test",testkey1="testvalue1"} 60
+cluster_1_demo_collector_temperature{} 65
+```
+
+### Explanation of Output Fields:
+
+- **Metric Name**: The name of the metric being reported (e.g., `cluster_1_demo_collector_temperature`).
+- **Labels**: Labels are key-value pairs that provide additional context to the metric (e.g., `gpu="0"`, `type="test"`).
+- **Metric Value**: The value of the metric (e.g., `55`, `60`, `65`).
+- **`script_path`**: The path to the script that generated this metric.
+- **`exec_time`**: The timestamp when the script was executed, in the format `YYYY-MM-DD HH:MM:SS.MMM`.
+
+### Metric Naming Convention
+
+- **Metric names** should be in lowercase and can include underscores. For example, `cluster_1_demo_collector_temperature`.
+- **Labels** should use key-value pairs in the format `key="value"`. The keys should also follow the lowercase convention.
+
+### Multiple Metrics from One Script
+
+A single script can output multiple metrics, and each metric will be exposed separately. For example, one script may report GPU temperature, CPU load, and memory usage, with each reported as a different metric.
+
+Example output:
+```
+# HELP cluster_1_demo_collector_temperature Metric collected from external script (script_path="/opt/scripts/demo_collector.sh", exec_time="2025-04-01 14:35:21.123")
+# TYPE cluster_1_demo_collector_temperature gauge
+cluster_1_demo_collector_temperature{gpu="0"} 55
+cluster_1_demo_collector_temperature{gpu="1"} 60
+
+# HELP cluster_1_demo_collector_cpu_usage Metric collected from external script (script_path="/opt/scripts/demo_collector.sh", exec_time="2025-04-01 14:35:21.123")
+# TYPE cluster_1_demo_collector_cpu_usage gauge
+cluster_1_demo_collector_cpu_usage{core="0"} 80
+cluster_1_demo_collector_cpu_usage{core="1"} 85
+```
+
+## Scraping Interval
+
+The `public_exporter` will scrape data from your script based on the configuration defined in the `config.yaml` file. The interval defines how often the script will be executed.
+
+### Example `config.yaml` Configuration
+
+```yaml
+# Global settings (apply to all clusters)
+global:
+  log_level: "info"  # Log level: debug, info, warning, error
+  log_file: "/var/log/public_exporter.log"  # Log file path
+  default_scrape_interval: 30  # Default collection interval in seconds (if not specified)
+
+# Cluster-specific settings
+clusters:
+  cluster_A:
+    enabled: true  # Enable or disable this cluster
+    collectors:
+      npu:
+        enabled: true  # Enable or disable this collector
+        interval: 30  # Execution interval (seconds)
+        timeout: 10  # Execution timeout (seconds)
+        script_path: "/usr/local/bin/npu_status.sh"
+        script_type: "shell"  # Script type: shell or python
+
+      gpu:
+        enabled: true
+        interval: 60  # Execution interval (seconds)
+        timeout: 15  # Execution timeout (seconds)
+        script_path: "/usr/local/bin/gpu_status.sh"
+        script_type: "shell"
+
+      temp:
+        enabled: true
+        script_path: "/opt/scripts/temp_collector.py"  # Path to Python script
+        script_type: "python"  # Script type: python
+        interval: 30  # Execution interval (seconds)
+        timeout: 10  # Execution timeout (seconds)
+
+  cluster_B:
+    enabled: false  # This cluster is disabled, no data collection
+    collectors:
+      gpu:
+        enabled: true
+        interval: 45  # Execution interval (seconds)
+        timeout: 10  # Execution timeout (seconds)
+        script_path: "/usr/local/bin/gpu_status_cluster_B.sh"
+        script_type: "shell"
+      cpu:
+        enabled: true
+        interval: 20  # Execution interval (seconds)
+        script_type: "shell"
+        script_path: "/usr/local/bin/cpu_status.sh"
+```
+
+### Configuration Explanation
+
+- **`enabled`**: Set to `true` or `false` to enable or disable a specific cluster or collector.
+- **`script_type`**: Specify whether the script is a `shell` or `python` script.
+- **`interval`**: Defines the interval in seconds at which the script will be executed.
+- **`timeout`**: The maximum time (in seconds) allowed for the script to run before being terminated.
+- **`script_path`**: The path to the script that will be executed.
+
+### Scraping and Timeout
+
+- **Interval**: Defines how often the script should be executed. For example, if you set `interval: 30`, the script will run every 30 seconds.
+- **Timeout**: Defines the maximum time the script can run before it is forcibly terminated. This is set in the `config.yaml` file.
+
+### Example:
+
+```yaml
+interval: 30
+timeout: 10
+script_type: shell  # or python
+script_path: "/opt/scripts/demo_collector.sh"
+```
+
+In this example:
+- The script `demo_collector.sh` will run every 30 seconds.
+- If the script takes longer than 10 seconds, it will be forcibly terminated.
+
+
+## Troubleshooting
+
+If the script is not producing the expected output:
+1. Make sure the script outputs data in the correct format (metric name, labels, and value).
+2. Check the log file (`/var/log/public_exporter.log`) for any errors related to script execution.
+3. Ensure the script is executable and accessible by the `public_exporter` process.
+
+## Conclusion
+
+By following the above guidelines, you can create custom scripts for your monitoring needs and integrate them seamlessly into the `public_exporter` to expose data for Prometheus.
