@@ -88,8 +88,7 @@ When the script is executed, the exporter will expose the data in the following 
 #### Example Output (from `/metrics` endpoint):
 
 ```
-# HELP cluster_1_demo_collector_temperature Metric collected from external script 
-# (script_path="/opt/scripts/demo_collector.sh", exec_time="2025-04-01 14:35:21.123")
+# HELP cluster_1_demo_collector_temperature Metric collected from external scrip (script_path="/opt/scripts/demo_collector.sh", exec_time="2025-04-01 14:35:21.123")
 # TYPE cluster_1_demo_collector_temperature gauge
 cluster_1_demo_collector_temperature{gpu="0"} 55
 cluster_1_demo_collector_temperature{gpu="1",type="test",testkey1="testvalue1"} 60
@@ -134,10 +133,13 @@ The `public_exporter` will scrape data from your script based on the configurati
 
 ```yaml
 # Global settings (apply to all clusters)
+
 global:
-  log_level: "info"  # Log level: debug, info, warning, error
-  log_file: "/var/log/public_exporter.log"  # Log file path
-  default_scrape_interval: 30  # Default collection interval in seconds (if not specified)
+  log_file: "/var/log/exporter/public_exporter.log"  # Log file path
+  log_level: "info" # Log level: debug, info, warning, error
+  log_max_age: 7         # Log retention in days
+  log_rotation_time: 24  # Rotation time in hours
+  default_scrape_interval: 30 # Default collection interval in seconds (if not specified)
 
 # Cluster-specific settings
 clusters:
