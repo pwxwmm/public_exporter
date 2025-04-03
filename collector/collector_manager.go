@@ -1,3 +1,12 @@
+// Author: mmwei3
+// Email: mmwei3@iflytek.com
+// Date: 2025-04-03
+//
+// Description:
+// This package manages data collectors that execute external scripts periodically. 
+// It supports Python and Shell scripts, ensuring their outputs are stored and exposed as metrics.
+// The collected data is formatted for Prometheus compatibility and stored in a sync map.
+
 package collector
 
 import (

@@ -1,3 +1,12 @@
+// Author: mmwei3
+// Email: mmwei3@iflytek.com
+// Date: 2025-04-03
+//
+// Description:
+// This package provides configuration management for a monitoring system.
+// It loads YAML configuration, sets default values, and configures logging with rotation support.
+// The configuration supports multiple clusters and collectors with customizable intervals and timeouts.
+
 package config
 
 import (

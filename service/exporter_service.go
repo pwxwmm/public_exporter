@@ -1,3 +1,12 @@
+// Author: mmwei3
+// Email: mmwei3@iflytek.com
+// Date: 2025-04-03
+//
+// Description:
+// This package defines the ExporterService, which manages the initialization 
+// and execution of both the CollectorManager and the Scheduler. It ensures 
+// background tasks are properly started for Prometheus metric collection.
+
 package service
 
 import (

@@ -1,3 +1,12 @@
+// Author: mmwei3
+// Email: mmwei3@iflytek.com
+// Date: 2025-04-03
+//
+// Description:
+// This package provides a scheduler for executing collectors at predefined intervals.
+// It manages periodic execution of external scripts for multiple clusters and 
+// ensures the collected data is stored for Prometheus exposure.
+
 package scheduler
 
 import (
