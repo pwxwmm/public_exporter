@@ -1,15 +1,16 @@
+
 # Changelog
 
 ## [Unreleased]
 
 ### Added
-- Prometheus 指标 `collector_health_status{cluster, collector}`，用于标识每个 collector 的健康状态。
-- Prometheus 指标 `exporter_health_status`，用于表示 exporter 全局健康状态（任一 collector 异常为 0）。
-- `/health` 接口支持返回每个 collector 的健康状态 JSON 结构。
+- Prometheus metric `collector_health_status{cluster, collector}` to indicate the health status of each collector.
+- Prometheus metric `exporter_health_status` to represent the global health status of the exporter (0 if any collector fails).
+- `/health` endpoint now returns the health status of each collector in JSON format.
 
 ### Changed
-- 优化 `collector_manager.go` 中 collector 输出逻辑，确保采集稳定。
-- 更新 `main.go`，在 `/metrics` 中加入 exporter 全局健康状态 `exporter_health_status`。
+- Improved the collector output logic in `collector_manager.go` to ensure stable data collection.
+- Updated `main.go` to include the `exporter_health_status` in the `/metrics` endpoint.
 
 ### Demo info
 ```python
@@ -85,15 +86,15 @@ collector_health_status{cluster="cluster_A", collector="temp"} 1
 ## [1.0.0] - 2025-04-10
 
 ### Added
-- 基本的 `/metrics` 和 `/health` 端点，支持 Prometheus 采集器数据和健康状态。
-- 初始版本中，支持通过配置文件管理 collector。
+- Basic `/metrics` and `/health` endpoints to expose Prometheus-compatible collector data and health status.
+- Initial version with collector management through a configuration file.
 
 ### Changed
-- 完成了 collector 和健康状态的改进，确保在采集失败时能反映在 Prometheus 指标中。
+- Enhanced the handling of collector and health status to ensure Prometheus metrics reflect the collection failure.
 
 ## [0.1.0] - 2025-03-28
 
 ### Added
-- 项目初始化，包括基础的 `collector_manager.go` 和配置文件处理。
-- 初步支持通过定时执行脚本采集 Prometheus 兼容的数据。
+- Project initialization, including the basic `collector_manager.go` and configuration file handling.
+- Initial support for periodically running scripts to collect Prometheus-compatible data.
 
