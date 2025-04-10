@@ -7,15 +7,13 @@ import (
 	"os"
 	"strings"
 	"io"
-	"net/http" 
-
+	"net/http"
 	"public_exporter/config"
 	"public_exporter/collector"
 	"public_exporter/scheduler"
 	"public_exporter/service"
 )
 
-// Author information constants.
 const (
 	Author = "mmwei3"
 	Email  = "mmwei3@iflytek.com, 1300042631@qq.com"
@@ -30,59 +28,89 @@ func init() {
 }
 
 func main() {
-	// Print author information.
 	fmt.Println("=====================================")
 	fmt.Println("         Public Exporter             ")
 	fmt.Println("=====================================")
 	fmt.Printf("Author: %s\nEmail: %s\nDate: %s\n", Author, Email, Date)
 
-	// Load configuration.
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
 		fmt.Printf("Error loading config: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Setup logging - log to both stdout and the log file.
 	logFile, err := os.OpenFile(cfg.Global.LogFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
 	if err != nil {
 		fmt.Printf("Error opening log file: %v\n", err)
 		os.Exit(1)
 	}
 	defer logFile.Close()
-
-	// Create a multi-writer to log to both stdout and the log file.
-	multiWriter := io.MultiWriter(os.Stdout, logFile)
-	log.SetOutput(multiWriter)
+	log.SetOutput(io.MultiWriter(os.Stdout, logFile))
 
 	log.Println("Starting public_exporter...")
 
-	// Initialize CollectorManager, Scheduler, and ExporterService.
 	collectorManager := collector.NewCollectorManager(cfg)
 	sched := scheduler.NewScheduler()
 	exporterService := service.NewExporterService(cfg, collectorManager, sched)
 	exporterService.Start()
 
-	// Create a custom HTTP handler for the /metrics endpoint.
 	http.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
 		var outputs []string
-		collector.CollectorOutputs.Range(func(key, value interface{}) bool {
+		globalHealthy := 1
+
+		collector.CollectorOutputs.Range(func(_, value interface{}) bool {
 			outputs = append(outputs, fmt.Sprintf("%s", value))
 			return true
 		})
+
+		collector.CollectorHealth.Range(func(key, value interface{}) bool {
+			parts := strings.Split(key.(string), ":")
+			cluster, name := parts[0], parts[1]
+			health := value.(int)
+			if health == 0 {
+				globalHealthy = 0
+			}
+			outputs = append(outputs, fmt.Sprintf(`collector_health_status{cluster="%s", collector="%s"} %d`, cluster, name, health))
+			return true
+		})
+
+		outputs = append(outputs, `# HELP exporter_health_status Global health status of the exporter`)
+		outputs = append(outputs, `# TYPE exporter_health_status gauge`)
+		outputs = append(outputs, fmt.Sprintf("exporter_health_status %d", globalHealthy))
+
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(strings.Join(outputs, "\n")))
 	})
 
-	// Add a simple health check endpoint.
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		globalHealthy := "ok"
+		collectorStatuses := make(map[string]string)
+
+		collector.CollectorHealth.Range(func(key, value interface{}) bool {
+			name := key.(string)
+			health := value.(int)
+			if health == 0 {
+				collectorStatuses[name] = "failed"
+				globalHealthy = "failed"
+			} else {
+				collectorStatuses[name] = "ok"
+			}
+			return true
+		})
+
+		output := fmt.Sprintf(`{"status":"%s", "collectors":{`, globalHealthy)
+		var items []string
+		for k, v := range collectorStatuses {
+			items = append(items, fmt.Sprintf(`"%s":"%s"`, k, v))
+		}
+		output += strings.Join(items, ",") + `}}`
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status": "ok"}`))
+		w.Write([]byte(output))
 	})
 
-	// Start the HTTP server.
 	port := 5535
 	log.Printf("Exporter is running on http://0.0.0.0:%d/metrics", port)
 	if err := http.ListenAndServe(fmt.Sprintf(":%d", port), nil); err != nil {
