@@ -2,7 +2,11 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+### Changed
+### Demo info
 
+## [2.0.0] - 2025-04-10
 ### Added
 - Prometheus metric `collector_health_status{cluster, collector}` to indicate the health status of each collector.
 - Prometheus metric `exporter_health_status` to represent the global health status of the exporter (0 if any collector fails).
