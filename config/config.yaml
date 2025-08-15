@@ -1,45 +1,76 @@
+# Public Exporter Configuration
+# Author: mmwei3
+# Email: mmwei3@iflytek.com
+# Date: 2025-04-03
+
 global:
-  log_file: "/var/log/exporter/public_exporter.log"
-  log_level: "info"
-  log_max_age: 7         # Log retention in days
-  log_rotation_time: 24  # Rotation time in hours
-  default_scrape_interval: 30
+  # Logging configuration
+  log_file: "/var/log/public_exporter/exporter.log"
+  log_level: "info"  # debug, info, warn, error, fatal, panic
+  log_max_age: 7     # days
+  log_rotation_time: 24  # hours
+  
+  # HTTP server configuration
+  http_port: 5535
+  http_timeout: 30   # seconds
+  
+  # Default scrape interval for collectors (if not specified)
+  default_scrape_interval: 60  # seconds
 
 clusters:
-  cluster_A:
+  # Example cluster configuration
+  production:
     enabled: true
     collectors:
-      npu:
+      # Example Python3 collector
+      system_metrics:
         enabled: true
-        interval: 37
-        timeout: 10
-        script_path: "/opt/scripts/shell/npu_status.sh"
+        interval: 30      # seconds
+        timeout: 10       # seconds
+        script_path: "/scripts/check_system_metrics.py"
+        script_type: "python3"
+      
+      # Example Shell script collector
+      network_status:
+        enabled: true
+        interval: 60      # seconds
+        timeout: 15       # seconds
+        script_path: "/scripts/check_network.sh"
         script_type: "shell"
-      gpu:
-        enabled: true
-        interval: 68
-        timeout: 15
-        script_path: "/opt/scripts/shell/gpu_status.sh"
-        script_type: "shell"
-      temp:
-        enabled: true
-        interval: 56
-        timeout: 10
-        script_path: "/opt/scripts/python/temp_collector.py"
-        script_type: "python"
+      
+      # Example Python2 collector (legacy)
+      legacy_check:
+        enabled: false    # disabled by default
+        interval: 120     # seconds
+        timeout: 20       # seconds
+        script_path: "/scripts/legacy_check.py"
+        script_type: "python2"
 
-  cluster_B:
-    enabled: false
+  # Another cluster example
+  staging:
+    enabled: true
     collectors:
-      gpu:
+      app_health:
         enabled: true
-        interval: 45
-        timeout: 10
-        script_path: "/usr/local/bin/gpu_status_cluster_B.sh"
-        script_type: "shell"
-      cpu:
+        interval: 45      # seconds
+        timeout: 25       # seconds
+        script_path: "/scripts/check_app_health.py"
+        script_type: "python3"
+      
+      # This collector will use the default interval (60s) from global config
+      basic_check:
         enabled: true
-        interval: 20
-        timeout: 10
-        script_path: "/usr/local/bin/cpu_status.sh"
+        timeout: 5        # seconds
+        script_path: "/scripts/basic_check.sh"
         script_type: "shell"
+
+  # Disabled cluster example
+  development:
+    enabled: false        # This cluster is disabled
+    collectors:
+      dev_metrics:
+        enabled: true
+        interval: 30
+        timeout: 10
+        script_path: "/scripts/dev_metrics.py"
+        script_type: "python3"

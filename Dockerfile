@@ -22,6 +22,7 @@ FROM alpine:latest
 # Install necessary dependencies: bash, python3, pip, and common Python modules
 RUN sed -i 's|dl-cdn.alpinelinux.org|mirrors.aliyun.com|g' /etc/apk/repositories \
     && apk add --no-cache ca-certificates bash python3 py3-pip 
+
 RUN pip install --no-cache-dir --break-system-packages \
     requests \
     PyYAML 

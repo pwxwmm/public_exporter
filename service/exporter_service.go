@@ -4,8 +4,8 @@
 //
 // Description:
 // This package defines the ExporterService, which manages the initialization 
-// and execution of both the CollectorManager and the Scheduler. It ensures 
-// background tasks are properly started for Prometheus metric collection.
+// and execution of the CollectorManager. It ensures background tasks are 
+// properly started for Prometheus metric collection.
 
 package service
 
@@ -13,30 +13,38 @@ import (
 	"log"
 	"public_exporter/config"
 	"public_exporter/collector"
-	"public_exporter/scheduler"
 )
 
-// ExporterService is the service layer that coordinates the CollectorManager and Scheduler.
+// ExporterService is the service layer that coordinates the CollectorManager.
 type ExporterService struct {
 	Config           *config.Config
 	CollectorManager *collector.CollectorManager
-	Scheduler        *scheduler.Scheduler
 }
 
 // NewExporterService creates a new ExporterService.
-func NewExporterService(cfg *config.Config, cm *collector.CollectorManager, s *scheduler.Scheduler) *ExporterService {
+func NewExporterService(cfg *config.Config, cm *collector.CollectorManager) *ExporterService {
 	return &ExporterService{
 		Config:           cfg,
 		CollectorManager: cm,
-		Scheduler:        s,
 	}
 }
 
-// Start starts the background tasks: collectors and scheduler.
-func (es *ExporterService) Start() {
-	// Start collector routines.
-	go es.CollectorManager.RegisterAll()
-	// Start scheduler routines.
-	go es.Scheduler.StartScheduler(es.Config)
-	log.Println("Exporter service started.")
+// Start starts the background tasks: collectors.
+func (es *ExporterService) Start() error {
+	log.Println("Starting exporter service...")
+	
+	// Start collector routines
+	if err := es.CollectorManager.Start(); err != nil {
+		return err
+	}
+	
+	log.Println("Exporter service started successfully.")
+	return nil
+}
+
+// Stop gracefully stops the exporter service.
+func (es *ExporterService) Stop() {
+	log.Println("Stopping exporter service...")
+	es.CollectorManager.Stop()
+	log.Println("Exporter service stopped.")
 }

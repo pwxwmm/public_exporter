@@ -1,222 +1,325 @@
 
 ---
 
-# Public Exporter - Custom Script Integration Guide
+# Public Exporter
 
-## Author Information
+[![Go Version](https://img.shields.io/badge/Go-1.21+-blue.svg)](https://golang.org)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/Version-1.0.0-orange.svg)](CHANGELOG.md)
 
-- **Author**: mmwei3
-- **Email**: mmwei3@iflytek.com, 1300042631@qq.com
-- **Date**: 2025-03-28
+A high-performance Prometheus exporter for executing external scripts and collecting metrics from multiple clusters.
 
-## Overview
+## Features
 
-The `public_exporter` allows you to integrate custom scripts for data collection. These scripts are executed periodically, and the data they produce is exposed in the **Prometheus** format for monitoring. This guide provides the format your script's output should follow, and how the data will be exposed by the exporter.
+- 🚀 **High Performance**: Efficient script execution with proper timeout handling
+- 🔧 **Flexible Configuration**: Support for multiple clusters and collectors
+- 📊 **Prometheus Compatible**: Native Prometheus metrics format
+- 🐍 **Multi-Language Support**: Python2, Python3, and Shell scripts
+- 🏥 **Health Monitoring**: Built-in health checks and status monitoring
+- 🔄 **Graceful Shutdown**: Proper cleanup and resource management
+- 📝 **Structured Logging**: Log rotation and configurable log levels
+- 🐳 **Docker Ready**: Containerized deployment support
 
-## Script Output Format
-
-Your script should produce output in the following format:
-
-1. **Metric Name**
-2. **Labels (optional)**
-3. **Metric Value**
-
-The basic syntax for each output line is:
+## Architecture
 
 ```
-<metric_name>{<label1>="<value1>", <label2>="<value2>", ...} <metric_value>
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   HTTP Server   │    │ CollectorManager │    │ ScriptExecutor  │
+│   (Port 5535)   │◄──►│                  │◄──►│                 │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+         │                       │                       │
+         ▼                       ▼                       ▼
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   /metrics      │    │   Collectors     │    │  Python/Shell   │
+│   /health       │    │   (Goroutines)   │    │    Scripts      │
+│   /             │    └──────────────────┘    └─────────────────┘
+└─────────────────┘
 ```
 
-### Examples
+## Quick Start
 
-#### 1. Metric with Labels
-```bash
-cluster_1_demo_collector_temperature{gpu="0"} 55
+### Prerequisites
+
+- Go 1.21 or later
+- Python2/Python3 (for Python script collectors)
+- Bash (for shell script collectors)
+
+### Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd public_exporter
+   ```
+
+2. **Install dependencies**
+   ```bash
+   make deps
+   # or manually:
+   go mod download
+   go mod tidy
+   ```
+
+3. **Build the application**
+   ```bash
+   make build
+   # or manually:
+   go build -o build/public_exporter ./cmd
+   ```
+
+4. **Run the exporter**
+   ```bash
+   make run
+   # or manually:
+   ./build/public_exporter -config.file=./config/config.yaml
+   ```
+
+### Configuration
+
+Create a `config.yaml` file:
+
+```yaml
+global:
+  log_file: "/var/log/public_exporter/exporter.log"
+  log_level: "info"
+  log_max_age: 7
+  log_rotation_time: 24
+  http_port: 5535
+  http_timeout: 30
+  default_scrape_interval: 60
+
+clusters:
+  production:
+    enabled: true
+    collectors:
+      system_metrics:
+        enabled: true
+        interval: 30
+        timeout: 10
+        script_path: "/scripts/check_system.py"
+        script_type: "python3"
+      
+      network_status:
+        enabled: true
+        interval: 60
+        timeout: 15
+        script_path: "/scripts/check_network.sh"
+        script_type: "shell"
 ```
-- **Metric Name**: `cluster_1_demo_collector_temperature`
-- **Label**: `gpu="0"`
-- **Metric Value**: `55`
 
-#### 2. Metric with Multiple Labels
-```bash
-cluster_1_demo_collector_temperature{gpu="1", type="test", testkey1="testvalue1"} 60
-```
-- **Metric Name**: `cluster_1_demo_collector_temperature`
-- **Labels**: `gpu="1"`, `type="test"`, `testkey1="testvalue1"`
-- **Metric Value**: `60`
+### Script Requirements
 
-#### 3. Metric without Labels
-```bash
-cluster_1_demo_collector_temperature 65
-```
-- **Metric Name**: `cluster_1_demo_collector_temperature`
-- **Metric Value**: `65`
+Your collection scripts should output metrics in Prometheus format:
 
-## Script Execution and Output Handling
-
-### Supported Script Types
-You can use the following script types:
-- **Shell Scripts** (`.sh`)
-- **Python Scripts** (`.py`)
-
-Ensure the output is consistent with the format shown above, with one line per metric.
-
-### Example Shell Script (`/opt/scripts/demo_collector.sh`):
-```bash
-#!/bin/bash
-
-echo 'cluster_1_demo_collector_temperature{gpu="0"} 55'
-echo 'cluster_1_demo_collector_temperature{gpu="1",type="test",testkey1="testvalue1"} 60'
-echo 'cluster_1_demo_collector_temperature 65'
-```
-
-### Example Python Script (`/opt/scripts/demo_collector.py`):
 ```python
 #!/usr/bin/env python3
+# Example Python collector script
 
-print('cluster_1_demo_collector_temperature{gpu="0"} 55')
-print('cluster_1_demo_collector_temperature{gpu="1",type="test",testkey1="testvalue1"} 60')
-print('cluster_1_demo_collector_temperature 65')
+import time
+import random
+
+# Simulate some metrics
+cpu_usage = random.uniform(0, 100)
+memory_usage = random.uniform(0, 100)
+
+# Output in Prometheus format
+print(f"# HELP cpu_usage_percent CPU usage percentage")
+print(f"# TYPE cpu_usage_percent gauge")
+print(f"cpu_usage_percent {cpu_usage}")
+
+print(f"# HELP memory_usage_percent Memory usage percentage")
+print(f"# TYPE memory_usage_percent gauge")
+print(f"memory_usage_percent {memory_usage}")
 ```
 
-## Exporter Data Exposure
+```bash
+#!/bin/bash
+# Example Shell collector script
 
-### Prometheus Format
+# Get disk usage
+disk_usage=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
 
-When the script is executed, the exporter will expose the data in the following format at the `/metrics` endpoint:
-
-#### Example Output (from `/metrics` endpoint):
-
-```
-# HELP cluster_1_demo_collector_temperature Metric collected from external scrip (script_path="/opt/scripts/demo_collector.sh", exec_time="2025-04-01 14:35:21.123")
-# TYPE cluster_1_demo_collector_temperature gauge
-cluster_1_demo_collector_temperature{gpu="0"} 55
-cluster_1_demo_collector_temperature{gpu="1",type="test",testkey1="testvalue1"} 60
-cluster_1_demo_collector_temperature{} 65
+# Output in Prometheus format
+echo "# HELP disk_usage_percent Disk usage percentage"
+echo "# TYPE disk_usage_percent gauge"
+echo "disk_usage_percent $disk_usage"
 ```
 
-### Explanation of Output Fields:
+## API Endpoints
 
-- **Metric Name**: The name of the metric being reported (e.g., `cluster_1_demo_collector_temperature`).
-- **Labels**: Labels are key-value pairs that provide additional context to the metric (e.g., `gpu="0"`, `type="test"`).
-- **Metric Value**: The value of the metric (e.g., `55`, `60`, `65`).
-- **`script_path`**: The path to the script that generated this metric.
-- **`exec_time`**: The timestamp when the script was executed, in the format `YYYY-MM-DD HH:MM:SS.MMM`.
+### `/metrics`
+Prometheus metrics endpoint. Returns all collected metrics in Prometheus format.
 
-### Metric Naming Convention
+### `/health`
+Health check endpoint. Returns JSON status of all collectors.
 
-- **Metric names** should be in lowercase and can include underscores. For example, `cluster_1_demo_collector_temperature`.
-- **Labels** should use key-value pairs in the format `key="value"`. The keys should also follow the lowercase convention.
-
-### Multiple Metrics from One Script
-
-A single script can output multiple metrics, and each metric will be exposed separately. For example, one script may report GPU temperature, CPU load, and memory usage, with each reported as a different metric.
-
-Example output:
-```
-# HELP cluster_1_demo_collector_temperature Metric collected from external script (script_path="/opt/scripts/demo_collector.sh", exec_time="2025-04-01 14:35:21.123")
-# TYPE cluster_1_demo_collector_temperature gauge
-cluster_1_demo_collector_temperature{gpu="0"} 55
-cluster_1_demo_collector_temperature{gpu="1"} 60
-
-# HELP cluster_1_demo_collector_cpu_usage Metric collected from external script (script_path="/opt/scripts/demo_collector.sh", exec_time="2025-04-01 14:35:21.123")
-# TYPE cluster_1_demo_collector_cpu_usage gauge
-cluster_1_demo_collector_cpu_usage{core="0"} 80
-cluster_1_demo_collector_cpu_usage{core="1"} 85
+```json
+{
+  "status": "ok",
+  "collectors": {
+    "production:system_metrics": "ok",
+    "production:network_status": "ok"
+  }
+}
 ```
 
-## Scraping Interval
+### `/`
+Root endpoint with basic information and links to other endpoints.
 
-The `public_exporter` will scrape data from your script based on the configuration defined in the `config.yaml` file. The interval defines how often the script will be executed.
+## Metrics
 
-### Example `config.yaml` Configuration
+The exporter provides several built-in metrics:
 
-```yaml
-# Global settings (apply to all clusters)
+- `collector_health_status{cluster="name", collector="name"}` - Health status of each collector (1=healthy, 0=unhealthy)
+- `exporter_health_status` - Global health status of the exporter
+- `collector_count` - Total number of active collectors
 
-global:
-  log_file: "/var/log/exporter/public_exporter.log"  # Log file path
-  log_level: "info" # Log level: debug, info, warning, error
-  log_max_age: 7         # Log retention in days
-  log_rotation_time: 24  # Rotation time in hours
-  default_scrape_interval: 30 # Default collection interval in seconds (if not specified)
+## Docker Deployment
 
-# Cluster-specific settings
-clusters:
-  cluster_A:
-    enabled: true  # Enable or disable this cluster
-    collectors:
-      npu:
-        enabled: true  # Enable or disable this collector
-        interval: 30  # Execution interval (seconds)
-        timeout: 10  # Execution timeout (seconds)
-        script_path: "/usr/local/bin/npu_status.sh"
-        script_type: "shell"  # Script type: shell or python
-
-      gpu:
-        enabled: true
-        interval: 60  # Execution interval (seconds)
-        timeout: 15  # Execution timeout (seconds)
-        script_path: "/usr/local/bin/gpu_status.sh"
-        script_type: "shell"
-
-      temp:
-        enabled: true
-        script_path: "/opt/scripts/temp_collector.py"  # Path to Python script
-        script_type: "python"  # Script type: python
-        interval: 30  # Execution interval (seconds)
-        timeout: 10  # Execution timeout (seconds)
-
-  cluster_B:
-    enabled: false  # This cluster is disabled, no data collection
-    collectors:
-      gpu:
-        enabled: true
-        interval: 45  # Execution interval (seconds)
-        timeout: 10  # Execution timeout (seconds)
-        script_path: "/usr/local/bin/gpu_status_cluster_B.sh"
-        script_type: "shell"
-      cpu:
-        enabled: true
-        interval: 20  # Execution interval (seconds)
-        script_type: "shell"
-        script_path: "/usr/local/bin/cpu_status.sh"
+### Build Docker Image
+```bash
+make docker-build
 ```
 
-### Configuration Explanation
-
-- **`enabled`**: Set to `true` or `false` to enable or disable a specific cluster or collector.
-- **`script_type`**: Specify whether the script is a `shell` or `python` script.
-- **`interval`**: Defines the interval in seconds at which the script will be executed.
-- **`timeout`**: The maximum time (in seconds) allowed for the script to run before being terminated.
-- **`script_path`**: The path to the script that will be executed.
-
-### Scraping and Timeout
-
-- **Interval**: Defines how often the script should be executed. For example, if you set `interval: 30`, the script will run every 30 seconds.
-- **Timeout**: Defines the maximum time the script can run before it is forcibly terminated. This is set in the `config.yaml` file.
-
-### Example:
-
-```yaml
-interval: 30
-timeout: 10
-script_type: shell  # or python
-script_path: "/opt/scripts/demo_collector.sh"
+### Run Container
+```bash
+make docker-run
 ```
 
-In this example:
-- The script `demo_collector.sh` will run every 30 seconds.
-- If the script takes longer than 10 seconds, it will be forcibly terminated.
+### Stop Container
+```bash
+make docker-clean
+```
 
+## Development
+
+### Project Structure
+```
+public_exporter/
+├── cmd/                    # Main application entry point
+├── collector/             # Data collection management
+├── config/                # Configuration management
+├── service/               # Service layer coordination
+├── scripts/               # Example collection scripts
+├── build/                 # Build artifacts
+├── config.yaml            # Configuration file
+├── Dockerfile             # Docker configuration
+├── Makefile               # Build automation
+├── go.mod                 # Go module definition
+└── README.md              # This file
+```
+
+### Available Make Targets
+
+```bash
+make help                  # Show all available targets
+make build                 # Build the application
+make test                  # Run tests
+make coverage              # Run tests with coverage
+make lint                  # Run linter
+make run                   # Build and run
+make docker-build          # Build Docker image
+make docker-run            # Run Docker container
+make install               # Install to /usr/local/bin
+```
+
+### Testing
+```bash
+# Run all tests
+make test
+
+# Run tests with coverage
+make coverage
+
+# Run specific package tests
+go test ./collector/...
+```
+
+## Configuration Reference
+
+### Global Configuration
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `log_file` | string | - | Path to log file (required) |
+| `log_level` | string | "info" | Log level (debug, info, warn, error, fatal, panic) |
+| `log_max_age` | int | 7 | Log retention in days |
+| `log_rotation_time` | int | 24 | Log rotation interval in hours |
+| `http_port` | int | 5535 | HTTP server port |
+| `http_timeout` | int | 30 | HTTP request timeout in seconds |
+| `default_scrape_interval` | int | 60 | Default collection interval in seconds |
+
+### Collector Configuration
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | bool | false | Whether the collector is enabled |
+| `interval` | int | global default | Collection interval in seconds |
+| `timeout` | int | 30 | Script execution timeout in seconds |
+| `script_path` | string | - | Path to the collection script (required) |
+| `script_type` | string | - | Script type: python, python2, python3, shell (required) |
 
 ## Troubleshooting
 
-If the script is not producing the expected output:
-1. Make sure the script outputs data in the correct format (metric name, labels, and value).
-2. Check the log file (`/var/log/public_exporter.log`) for any errors related to script execution.
-3. Ensure the script is executable and accessible by the `public_exporter` process.
+### Common Issues
 
-## Conclusion
+1. **Script execution fails**
+   - Check script permissions (`chmod +x /path/to/script`)
+   - Verify script path in configuration
+   - Check script syntax and dependencies
 
-By following the above guidelines, you can create custom scripts for your monitoring needs and integrate them seamlessly into the `public_exporter` to expose data for Prometheus.
+2. **Metrics not appearing**
+   - Verify collector is enabled in configuration
+   - Check script output format (should be Prometheus compatible)
+   - Review logs for execution errors
+
+3. **High resource usage**
+   - Adjust collection intervals
+   - Optimize script execution time
+   - Review script resource consumption
+
+### Log Analysis
+
+Enable debug logging to troubleshoot issues:
+
+```yaml
+global:
+  log_level: "debug"
+```
+
+### Health Checks
+
+Use the `/health` endpoint to monitor collector status:
+
+```bash
+curl http://localhost:5535/health
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests for new functionality
+5. Ensure all tests pass
+6. Submit a pull request
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Author
+
+- **mmwei3** - *Initial work* - [mmwei3@iflytek.com](mailto:mmwei3@iflytek.com)
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes and version history.
+
+## Support
+
+For support and questions:
+- Create an issue in the repository
+- Contact: mmwei3@iflytek.com
+- Documentation: [docs/](docs/)
+

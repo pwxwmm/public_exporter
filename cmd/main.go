@@ -1,23 +1,26 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
-	"os"
-	"strings"
-	"io"
 	"net/http"
+	"os"
+	"os/signal"
 	"public_exporter/config"
 	"public_exporter/collector"
-	"public_exporter/scheduler"
 	"public_exporter/service"
+	"strings"
+	"syscall"
+	"time"
 )
 
 const (
 	Author = "mmwei3"
 	Email  = "mmwei3@iflytek.com, 1300042631@qq.com"
 	Date   = "2025-03-28"
+	Version = "1.0.0"
 )
 
 var configPath string
@@ -30,74 +33,137 @@ func init() {
 func main() {
 	fmt.Println("=====================================")
 	fmt.Println("         Public Exporter             ")
+	fmt.Printf("         Version: %s                \n", Version)
 	fmt.Println("=====================================")
 	fmt.Printf("Author: %s\nEmail: %s\nDate: %s\n", Author, Email, Date)
 
+	// Load configuration
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
 		fmt.Printf("Error loading config: %v\n", err)
 		os.Exit(1)
 	}
 
-	logFile, err := os.OpenFile(cfg.Global.LogFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
-	if err != nil {
-		fmt.Printf("Error opening log file: %v\n", err)
+	// Setup logging
+	if err := setupLogging(cfg); err != nil {
+		fmt.Printf("Error setting up logging: %v\n", err)
 		os.Exit(1)
 	}
-	defer logFile.Close()
-	log.SetOutput(io.MultiWriter(os.Stdout, logFile))
 
 	log.Println("Starting public_exporter...")
 
+	// Create and start services
 	collectorManager := collector.NewCollectorManager(cfg)
-	sched := scheduler.NewScheduler()
-	exporterService := service.NewExporterService(cfg, collectorManager, sched)
-	exporterService.Start()
+	exporterService := service.NewExporterService(cfg, collectorManager)
+	
+	if err := exporterService.Start(); err != nil {
+		log.Fatalf("Failed to start exporter service: %v", err)
+	}
 
-	http.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+	// Setup HTTP server
+	server := setupHTTPServer(cfg, collectorManager)
+	
+	// Setup graceful shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	
+	go func() {
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+		<-sigChan
+		
+		log.Println("Received shutdown signal, starting graceful shutdown...")
+		cancel()
+		
+		// Give some time for graceful shutdown
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer shutdownCancel()
+		
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			log.Printf("Error during server shutdown: %v", err)
+		}
+		
+		exporterService.Stop()
+		log.Println("Graceful shutdown completed")
+		os.Exit(0)
+	}()
+
+	port := cfg.Global.HTTPPort
+	if port == 0 {
+		port = 5535
+	}
+	log.Printf("Exporter is running on http://0.0.0.0:%d/metrics", port)
+	
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Fatalf("Failed to start server: %v", err)
+	}
+}
+
+func setupLogging(cfg *config.Config) error {
+	// Setup logrus logging with rotation
+	config.SetupLogging(
+		cfg.Global.LogFile,
+		cfg.Global.LogLevel,
+		cfg.Global.LogMaxAge,
+		cfg.Global.LogRotationTime,
+	)
+	return nil
+}
+
+func setupHTTPServer(cfg *config.Config, collectorManager *collector.CollectorManager) *http.Server {
+	mux := http.NewServeMux()
+	
+	// Metrics endpoint
+	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
 		var outputs []string
 		globalHealthy := 1
 
-		collector.CollectorOutputs.Range(func(_, value interface{}) bool {
-			outputs = append(outputs, fmt.Sprintf("%s", value))
-			return true
-		})
+		// Get collector outputs
+		collectorOutputs := collectorManager.GetOutputs()
+		outputs = append(outputs, collectorOutputs...)
 
-		collector.CollectorHealth.Range(func(key, value interface{}) bool {
-			parts := strings.Split(key.(string), ":")
-			cluster, name := parts[0], parts[1]
-			health := value.(int)
-			if health == 0 {
-				globalHealthy = 0
+		// Get health status
+		healthStatus := collectorManager.GetHealthStatus()
+		for key, health := range healthStatus {
+			parts := strings.Split(key, ":")
+			if len(parts) == 2 {
+				cluster, name := parts[0], parts[1]
+				if health == 0 {
+					globalHealthy = 0
+				}
+				outputs = append(outputs, fmt.Sprintf(`collector_health_status{cluster="%s", collector="%s"} %d`, cluster, name, health))
 			}
-			outputs = append(outputs, fmt.Sprintf(`collector_health_status{cluster="%s", collector="%s"} %d`, cluster, name, health))
-			return true
-		})
+		}
 
+		// Add exporter health status
 		outputs = append(outputs, `# HELP exporter_health_status Global health status of the exporter`)
 		outputs = append(outputs, `# TYPE exporter_health_status gauge`)
 		outputs = append(outputs, fmt.Sprintf("exporter_health_status %d", globalHealthy))
+		
+		// Add collector count metric
+		outputs = append(outputs, `# HELP collector_count Total number of active collectors`)
+		outputs = append(outputs, `# TYPE collector_count gauge`)
+		outputs = append(outputs, fmt.Sprintf("collector_count %d", collectorManager.GetCollectorCount()))
 
-		w.Header().Set("Content-Type", "text/plain")
+		w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(strings.Join(outputs, "\n")))
 	})
 
-	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	// Health check endpoint
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		globalHealthy := "ok"
 		collectorStatuses := make(map[string]string)
 
-		collector.CollectorHealth.Range(func(key, value interface{}) bool {
-			name := key.(string)
-			health := value.(int)
+		healthStatus := collectorManager.GetHealthStatus()
+		for key, health := range healthStatus {
 			if health == 0 {
-				collectorStatuses[name] = "failed"
+				collectorStatuses[key] = "failed"
 				globalHealthy = "failed"
 			} else {
-				collectorStatuses[name] = "ok"
+				collectorStatuses[key] = "ok"
 			}
-			return true
-		})
+		}
 
 		output := fmt.Sprintf(`{"status":"%s", "collectors":{`, globalHealthy)
 		var items []string
@@ -111,9 +177,42 @@ func main() {
 		w.Write([]byte(output))
 	})
 
-	port := 5535
-	log.Printf("Exporter is running on http://0.0.0.0:%d/metrics", port)
-	if err := http.ListenAndServe(fmt.Sprintf(":%d", port), nil); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
+	// Root endpoint with basic info
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		html := fmt.Sprintf(`
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Public Exporter</title>
+    <meta charset="utf-8">
+</head>
+<body>
+    <h1>Public Exporter</h1>
+    <p>Version: %s</p>
+    <p>Author: %s</p>
+    <p>Email: %s</p>
+    <ul>
+        <li><a href="/metrics">Metrics</a> - Prometheus metrics endpoint</li>
+        <li><a href="/health">Health</a> - Health check endpoint</li>
+    </ul>
+</body>
+</html>`, Version, Author, Email)
+		w.Write([]byte(html))
+	})
+
+	// Get port from config or use default
+	port := cfg.Global.HTTPPort
+	if port == 0 {
+		port = 5535
+	}
+
+	return &http.Server{
+		Addr:         fmt.Sprintf(":%d", port),
+		Handler:      mux,
+		ReadTimeout:  time.Duration(cfg.Global.HTTPTimeout) * time.Second,
+		WriteTimeout: time.Duration(cfg.Global.HTTPTimeout) * time.Second,
+		IdleTimeout:  time.Duration(cfg.Global.HTTPTimeout*2) * time.Second,
 	}
 }

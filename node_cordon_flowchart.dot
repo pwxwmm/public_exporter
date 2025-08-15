@@ -1,0 +1,103 @@
+// 节点Cordon脚本流程图
+digraph {
+	rankdir=TB
+	node [fontname=Arial fontsize=10 shape=box style="rounded,filled"]
+	start [label="开始执行" fillcolor="#e1f5fe" shape=ellipse]
+	end [label="结束" fillcolor="#e1f5fe" shape=ellipse]
+	input [label="接收 alert_id 参数" fillcolor="#f3e5f5"]
+	login [label="调用登录接口获取 token" fillcolor="#f3e5f5"]
+	get_alert [label="获取告警详情" fillcolor="#f3e5f5"]
+	parse_info [label="解析 hostname 和 region" fillcolor="#f3e5f5"]
+	get_ip [label="通过 hostname 获取节点IP" fillcolor="#f3e5f5"]
+	get_status [label="获取节点状态" fillcolor="#f3e5f5"]
+	execute_cordon [label="执行 cordon 操作" fillcolor="#f3e5f5"]
+	success_notify [label="发送成功通知" fillcolor="#f3e5f5"]
+	token_check [label="token 获取成功?" fillcolor="#fff3e0" shape=diamond]
+	alert_check [label="获取到告警详情?" fillcolor="#fff3e0" shape=diamond]
+	hostname_check [label="hostname 存在?" fillcolor="#fff3e0" shape=diamond]
+	ip_check [label="IP 获取成功?" fillcolor="#fff3e0" shape=diamond]
+	status_check [label="节点状态获取成功?" fillcolor="#fff3e0" shape=diamond]
+	cordon_check [label="节点已被 cordon?" fillcolor="#fff3e0" shape=diamond]
+	cordon_success [label="cordon 成功?" fillcolor="#fff3e0" shape=diamond]
+	ky_error_check [label="存在 ky_error_id?" fillcolor="#fff3e0" shape=diamond]
+	error1 [label="发送错误通知
+退出码: 1" fillcolor="#ffebee"]
+	error2 [label="发送错误通知
+退出码: 2" fillcolor="#ffebee"]
+	error3 [label="发送错误通知
+退出码: 3" fillcolor="#ffebee"]
+	error4 [label="发送错误通知
+退出码: 4" fillcolor="#ffebee"]
+	already_cordon [label="发送信息通知
+退出码: 0" fillcolor="#e8f5e8"]
+	normal_exit [label="正常退出
+退出码: 0" fillcolor="#e8f5e8"]
+	special_op [label="执行特殊操作流程" fillcolor="#f3e5f5"]
+	check_docker_time [label="查询 Docker 服务启动时间" fillcolor="#f3e5f5"]
+	time_check [label="启动时间获取成功?" fillcolor="#fff3e0" shape=diamond]
+	time_valid [label="启动时间超过10分钟?" fillcolor="#fff3e0" shape=diamond]
+	check_bt_container [label="检查 bt- 容器是否存在" fillcolor="#f3e5f5"]
+	container_check [label="bt- 容器存在?" fillcolor="#fff3e0" shape=diamond]
+	restart_docker [label="重启 Docker 服务" fillcolor="#f3e5f5"]
+	restart_check [label="重启成功?" fillcolor="#fff3e0" shape=diamond]
+	call_uncordon [label="调用 uncordon 接口" fillcolor="#f3e5f5"]
+	uncordon_check [label="uncordon 成功?" fillcolor="#fff3e0" shape=diamond]
+	warn_skip1 [label="发送警告通知并跳过" fillcolor="#fff8e1"]
+	warn_skip2 [label="发送警告通知并跳过" fillcolor="#fff8e1"]
+	info_skip [label="发送信息通知并跳过" fillcolor="#fff8e1"]
+	docker_error [label="发送错误通知" fillcolor="#ffebee"]
+	uncordon_success [label="发送成功通知" fillcolor="#e8f5e8"]
+	uncordon_error [label="发送失败通知" fillcolor="#ffebee"]
+	start -> input
+	input -> login
+	login -> token_check
+	token_check -> error1 [label="失败"]
+	token_check -> get_alert [label="成功"]
+	get_alert -> alert_check
+	alert_check -> error2 [label="失败"]
+	alert_check -> parse_info [label="成功"]
+	parse_info -> hostname_check
+	hostname_check -> error2 [label="不存在"]
+	hostname_check -> get_ip [label="存在"]
+	get_ip -> ip_check
+	ip_check -> error2 [label="失败"]
+	ip_check -> get_status [label="成功"]
+	get_status -> status_check
+	status_check -> error3 [label="失败"]
+	status_check -> cordon_check [label="成功"]
+	cordon_check -> already_cordon [label="是"]
+	cordon_check -> execute_cordon [label="否"]
+	execute_cordon -> cordon_success
+	cordon_success -> error4 [label="失败"]
+	cordon_success -> success_notify [label="成功"]
+	success_notify -> ky_error_check
+	ky_error_check -> normal_exit [label="否"]
+	ky_error_check -> special_op [label="是"]
+	special_op -> check_docker_time
+	check_docker_time -> time_check
+	time_check -> warn_skip1 [label="失败"]
+	time_check -> time_valid [label="成功"]
+	time_valid -> warn_skip2 [label="否"]
+	time_valid -> check_bt_container [label="是"]
+	check_bt_container -> container_check
+	container_check -> info_skip [label="是"]
+	container_check -> restart_docker [label="否"]
+	restart_docker -> restart_check
+	restart_check -> docker_error [label="失败"]
+	restart_check -> call_uncordon [label="成功"]
+	call_uncordon -> uncordon_check
+	uncordon_check -> uncordon_success [label="成功"]
+	uncordon_check -> uncordon_error [label="失败"]
+	error1 -> end
+	error2 -> end
+	error3 -> end
+	error4 -> end
+	already_cordon -> end
+	normal_exit -> end
+	warn_skip1 -> end
+	warn_skip2 -> end
+	info_skip -> end
+	docker_error -> end
+	uncordon_success -> end
+	uncordon_error -> end
+}

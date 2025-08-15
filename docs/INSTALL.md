@@ -117,8 +117,6 @@ Restart=always
 User=nobody
 Group=nogroup
 Environment=CONFIG_FILE=/etc/public_exporter/config.yaml
-ExecStartPre=/bin/mkdir -p /var/log/public_exporter
-ExecStartPre=/bin/chown nobody:nogroup /var/log/public_exporter
 
 [Install]
 WantedBy=multi-user.target
@@ -172,5 +170,83 @@ sudo systemctl restart public_exporter
 ### 3. **Configuring `systemd` for automatic startup**:
 
 By enabling the service with the `systemctl enable` command, the service will automatically start when the machine reboots.
+
+
+### Ansible-playbook
+
+```yaml
+- name: Deploy and setup public_exporter service
+  hosts: exporter_hosts
+  become: yes
+  vars:
+    install_path: /define_app/public_exporter
+
+  tasks:
+    - name: 创建部署目录
+      file:
+        path: "{{ install_path }}/{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - config
+        - logs
+        - scripts
+      tags: [prepare, deploy]
+
+    - name: 拷贝主程序 binary
+      copy:
+        src: ./public_exporter
+        dest: "{{ install_path }}/public_exporter"
+        mode: '0755'
+      tags: [deploy]
+
+    - name: 拷贝配置文件
+      copy:
+        src: ./config/config.yaml
+        dest: "{{ install_path }}/config/config.yaml"
+        mode: '0644'
+      tags: [deploy]
+
+    - name: 拷贝脚本文件
+      copy:
+        src: ./scripts/get_optical_link_status.py
+        dest: "{{ install_path }}/scripts/get_optical_link_status.py"
+        mode: '0755'
+      tags: [deploy]
+
+    - name: 写入 systemd unit 文件
+      copy:
+        dest: /etc/systemd/system/public_exporter.service
+        content: |
+          [Unit]
+          Description=Public Metrics Exporter
+          After=network.target
+
+          [Service]
+          Type=simple
+          ExecStart={{ install_path }}/public_exporter --config.file={{ install_path }}/config/config.yaml
+          Restart=on-failure
+          RestartSec=5s
+          MemoryLimit=2048M
+
+          [Install]
+          WantedBy=multi-user.target
+        mode: '0644'
+      tags: [service]
+
+    - name: 重载 systemd
+      command: systemctl daemon-reload
+      tags: [service]
+
+    - name: 启动并设置服务开机启动
+      systemd:
+        name: public_exporter
+        enabled: yes
+        state: started
+      tags: [service]
+
+
+```
+
 
 ---
